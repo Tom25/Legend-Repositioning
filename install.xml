@@ -1,0 +1,417 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<?xml-stylesheet type="text/xsl" href="modx.prosilver.en.xsl"?>
+<!--For security purposes, please check: http
+://www.phpbb.com/mods/ for the latest version of this MOD. Although MODs are checked before being allowed in the MODs Database there is no guarantee that there are no security problems within the MOD. No support will be given for MODs not found within the MODs Database which can be found at http://www.phpbb.com/mods/-->
+<mod xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.phpbb.com/mods/xml/modx-1.2.3.xsd">
+	<header>
+		<license>http://opensource.org/licenses/gpl-license.php GNU General Public License v2</license>
+		<title lang="en">Legend Repositioning</title>
+		<description lang="en">This MOD was engineered to be fully compatible with the latest versions of phpBB3, as well as to provide an easy and convenient method for administrators to reposition their groups on the legend. This MOD allows administrators who have access to manage groups to reposition the groups they have displayed in their legend, both on the index.php and viewonline.php pages. Groups can be easily repositioned by clicking up and down arrows. Each time a group's position is moved, the action is logged in the administrator log. When a new group is added, it is automatically positioned at the end (or bottom) of the group list on the legend. When a group is deleted, the other groups behind it have their positions modified. </description>
+		<author-notes lang="en">This MOD was inspired by a MOD by CoC titled Group Legend Positioning. One main purpose of this MOD was to create an easy way for administrators to reposition the groups on their legend with as little installation problems as possible, phpBB 3.0.5 and up compatibility, and with an easy-to-use interface.</author-notes>
+		<author-group>
+			<author>
+				<realname>Tom Catullo</realname>
+				<email>tom@cortello.com</email>
+				<username>Tom</username>
+				<homepage>http://www.cortello.com</homepage>
+			</author>
+		</author-group>
+		<mod-version>1.0.3</mod-version>
+		<installation>
+			<level>easy</level>
+			<time>900</time>
+			<target-version>3.0.6</target-version>
+		</installation>
+		<history>
+			<entry>
+				<date>2009-09-05</date>
+				<rev-version>1.0.0</rev-version>
+				<changelog lang="en">
+					<change>Initial release</change>
+				</changelog>
+			</entry>
+			<entry>
+				<date>2009-10-04</date>
+				<rev-version>1.0.1</rev-version>
+				<changelog lang="en">
+					<change>Fixed problem with "Newly Registered Users" group not appearing on Legend Positioning panel in 3.0.6</change>
+				</changelog>
+			</entry>
+			<entry>
+				<date>2009-11-25</date>
+				<rev-version>1.0.2</rev-version>
+				<changelog lang="en">
+					<change>Fixed problem with the MOD's installation file when installing on 3.0.6</change>
+				</changelog>
+			</entry>
+			<entry>
+				<date>2010-02-17</date>
+				<rev-version>1.0.3</rev-version>
+				<changelog lang="en">
+					<change>Fixed error in User Control Panel when a usergroup's information is updated and a phpBB Debug error occurred.</change>
+					<change>Corrected the display of language-based names for pre-defined usergroups in ACP logs.</change>
+				</changelog>
+			</entry>
+		</history>
+	</header>
+	<action-group>
+		<copy>
+			<file from="root/install_legend_repositioning.php" to="install_legend_repositioning.php" />
+			<file from="root/language/en/mods/umil_legend_repositioning_mod.php" to="language/en/mods/umil_legend_repositioning_mod.php" />
+			<file from="root/umil/*.*" to="umil/*.*" />
+		</copy>
+		<open src="includes/acp/acp_groups.php">
+			<edit>
+				<find>		// Which page?
+		switch ($action)
+		{</find>
+				<action type="after-add"><![CDATA[			case 'move_up':
+			case 'move_down':
+				if (!$group_id)
+				{
+					trigger_error($user->lang['NO_GROUP'] . adm_back_link($this->u_action), E_USER_WARNING);
+				}
+
+
+				$sql = 'SELECT *
+					FROM ' . GROUPS_TABLE . "
+					WHERE group_id = $group_id";
+				$result = $db->sql_query($sql);
+				$row = $db->sql_fetchrow($result);
+				$db->sql_freeresult($result);
+
+				if (!$row)
+				{
+					trigger_error($user->lang[$error] . adm_back_link($this->u_action . '&amp;action=list&amp;g=' . $group_id), E_USER_WARNING);
+				}
+
+				$group_name = ($row['group_type'] == GROUP_SPECIAL) ? $user->lang['G_' . $row['group_name']] : $row['group_name'];
+				$move_group_name = $this->move_group_by($row, $action, 1);
+
+				if ($move_group_name !== false)
+				{
+					add_log('admin', 'LOG_GROUP_' . strtoupper($action), $group_name, $move_group_name);
+					$cache->destroy('sql', GROUPS_TABLE);
+				}
+			break;]]></action>
+			</edit>
+			<edit>
+				<find>				if (confirm_box(true))
+				{
+					$error = '';</find>
+				<action type="after-add">					// Get the position of the group we're deleting
+					$sql = 'SELECT group_position
+						FROM ' . GROUPS_TABLE . "
+						WHERE group_id = $group_id";
+					$result = $db->sql_query($sql);
+					$row = $db->sql_fetchrow($result);
+					$db->sql_freeresult($result);</action>
+			</edit>
+			<edit>
+				<find>							$error = group_delete($group_id, $group_row['group_name']);</find>
+				<action type="after-add">							// Now, change the positions of all the groups that come after it
+							$sql = 'UPDATE ' . GROUPS_TABLE . '
+								SET group_position = group_position - 1
+								WHERE group_position > ' . $row['group_position'];
+							$db->sql_query($sql);</action>
+			</edit>
+			<edit>
+				<find>				$avatar_select = basename(request_var('avatar_select', ''));
+				$category = basename(request_var('category', ''));</find>
+				<action type="after-add">				if ($action == 'add')
+				{
+					$sql = 'SELECT MAX(group_position) + 1 AS max_position
+						FROM ' . GROUPS_TABLE;
+					$result = $db->sql_query($sql);
+					$group_position = $db->sql_fetchfield('max_position');
+					$db->sql_freeresult($result);
+				}
+				else
+				{
+					$sql = 'SELECT group_position
+						FROM ' . GROUPS_TABLE . '
+						WHERE group_id = ' . $group_id;
+					$result = $db->sql_query_limit($sql, 1);
+					$row = $db->sql_fetchrow($result);
+					$group_position = $row['group_position'];
+					$db->sql_freeresult($result);
+				}</action>
+			</edit>
+			<edit>
+				<find>						if (!($error = group_create($group_id, $group_type, $group_name, $group_desc, $group_attributes, $allow_desc_bbcode, $allow_desc_urls, $allow_desc_smilies)))</find>
+				<inline-edit>
+					<inline-find>$allow_desc_smilies</inline-find>
+					<inline-action type="after-add">, $group_position</inline-action>
+				</inline-edit>
+			</edit>
+			<edit>
+				<find><![CDATA[					'GROUP_NAME'	=> $group_name,
+					'TOTAL_MEMBERS'	=> $row['total_members'],
+					));
+			}
+		}]]></find>
+				<action type="after-add"><![CDATA[		// Get all the groups to show in the repositioning panel
+		$sql = 'SELECT g.group_id, g.group_name, g.group_type, g.group_legend, g.group_position
+			FROM ' . GROUPS_TABLE . ' g
+			ORDER BY g.group_position ASC';
+		$result = $db->sql_query($sql);
+
+		$lookup = $cached_group_data_full = array();
+		if ($row = $db->sql_fetchrow($result))
+		{
+			$position = 0;
+			do
+			{
+				++$position;
+				if ($row['group_position'] != $position)
+				{
+					$sql = 'UPDATE ' . GROUPS_TABLE . "
+						SET group_position = $position
+						WHERE group_id = {$row['group_id']}";
+					$db->sql_query($sql);
+				}
+				$cached_group_data_full[$type][$row['group_id']] = $row;
+			}
+			while ($row = $db->sql_fetchrow($result));
+		}
+		$db->sql_freeresult($result);
+
+		foreach ($cached_group_data_full as $type => $row_ary)
+		{
+			foreach ($row_ary as $group_id => $row)
+			{
+				$group_name = (!empty($user->lang['G_' . $row['group_name']]))? $user->lang['G_' . $row['group_name']] : $row['group_name'];
+
+				$template->assign_block_vars('groups_full', array(
+					'U_MOVE_UP'		=> "{$this->u_action}&amp;action=move_up&amp;g=$group_id",
+					'U_MOVE_DOWN'		=> "{$this->u_action}&amp;action=move_down&amp;g=$group_id",
+
+					'S_GROUP_SPECIAL'	=> ($row['group_type'] == GROUP_SPECIAL) ? true : false,
+					
+					'S_ON_LEGEND'		=> ($row['group_legend'] == 1) ? true : false,
+
+					'GROUP_NAME'		=> $group_name,
+					)
+				);
+			}
+		}]]></action>
+			</edit>
+			<edit>
+				<find>}
+
+?></find>
+				<action type="before-add"><![CDATA[	// Make the function that repositions groups on the legend
+	function move_group_by($group_row, $action, $steps = 1)
+	{
+		global $db, $user;
+
+		$user->add_lang('acp/groups');
+
+		// Define variables based on the provided action
+		if ($action == 'move_up')
+		{
+			$group_position = $group_row['group_position'] - 1;
+		}
+		else
+		{
+			$group_position = $group_row['group_position'] + 1;
+		}
+
+		// For logging the action in the administrator log
+		$sql = 'SELECT group_name, group_type
+			FROM ' . GROUPS_TABLE . '
+			WHERE group_position = ' . $group_position;
+		$result = $db->sql_query_limit($sql, $steps);
+
+		$target = array();
+		while ($row = $db->sql_fetchrow($result))
+		{
+			$target = $row;
+		}
+		$db->sql_freeresult($result);
+
+		if (!sizeof($target))
+		{
+			// The group is already on top or bottom
+			return false;
+		}
+
+		// Now modify the database
+		$sql = 'UPDATE ' . GROUPS_TABLE . '
+			SET group_position = ' . $group_row['group_position'] . '
+			WHERE group_position = ' . $group_position;
+		$db->sql_query($sql);
+
+		$sql = 'UPDATE ' . GROUPS_TABLE . '
+			SET group_position = ' . $group_position . '
+			WHERE group_id = ' . $group_row['group_id'];
+		$db->sql_query($sql);
+
+		$tgroup_name = ($target['group_type'] == GROUP_SPECIAL) ? $user->lang['G_' . $target['group_name']] : $target['group_name'];
+
+		return $tgroup_name;
+	}]]></action>
+			</edit>
+		</open>
+		<open src="includes/ucp/ucp_groups.php">
+			<edit>
+				<find>				$sql = 'SELECT group_id, group_name, group_colour, group_desc, group_desc_uid, group_desc_bitfield, group_desc_options, group_type, group_founder_manage</find>
+				<inline-edit>
+					<inline-find>, group_founder_manage</inline-find>
+					<inline-action type="after-add">, group_position</inline-action>
+				</inline-edit>
+			</edit>
+			<edit>
+				<find>					$group_type = $group_row['group_type'];</find>
+				<action type="after-add">					$group_position = $group_row['group_position'];</action>
+			</edit>
+			<edit>
+				<find>								if (!($error = group_create($group_id, $group_type, $group_name, $group_desc, $group_attributes, $allow_desc_bbcode, $allow_desc_urls, $allow_desc_smilies)))</find>
+				<inline-edit>
+					<inline-find>, $allow_desc_smilies</inline-find>
+					<inline-action type="after-add">, $group_position</inline-action>
+				</inline-edit>
+			</edit>
+		</open>
+		<open src="includes/functions_user.php">
+			<edit>
+				<find><![CDATA[function group_create(&$group_id, $type, $name, $desc, $group_attributes, $allow_desc_bbcode = false, $allow_desc_urls = false, $allow_desc_smilies = false)]]></find>
+				<inline-edit>
+					<inline-find>$allow_desc_smilies = false</inline-find>
+					<inline-action type="after-add">, $group_position</inline-action>
+				</inline-edit>
+			</edit>
+			<edit>
+				<find>			'group_type'			=> (int) $type,</find>
+				<action type="after-add">			'group_position'		=> (int) $group_position,</action>
+			</edit>
+		</open>
+		<open src="adm/style/acp_groups.html">
+			<edit>
+				<find><![CDATA[		<!-- ENDIF -->
+	<!-- END groups -->
+	</tbody>
+	</table>]]></find>
+				<action type="after-add"><![CDATA[	<h1><br />{L_LEGEND_POSITIONING}</h1>
+
+	<p>{L_LEGEND_POSITIONING_EXPLAIN}</p>
+
+	<table cellspacing="1">
+		<col class="col1" /><col class="col1" /><col class="col1" /><col class="col1" />
+	<thead>
+	<tr>
+		<th style="width: 60%">{L_GROUP}</th>
+		<th style="width: 15%">{L_SPECIAL_GROUP}</th>
+		<th style="width: 15%">{L_ON_LEGEND}</th>
+		<th style="width: 10%">{L_ACTION}</th>
+	</tr>
+	</thead>
+	<tbody>
+	<!-- BEGIN groups_full -->
+		<tr>
+			<td<!-- IF not groups_full.S_ON_LEGEND --> class="col2"<!-- ENDIF -->><strong>{groups_full.GROUP_NAME}</strong></td>
+			<td<!-- IF not groups_full.S_ON_LEGEND --> class="col2"<!-- ENDIF --> style="text-align: center;"><!-- IF groups_full.S_GROUP_SPECIAL -->{L_YES}<!-- ELSE -->{L_NO}<!-- ENDIF --></td>
+			<td<!-- IF not groups_full.S_ON_LEGEND --> class="col2"<!-- ENDIF --> style="text-align: center;"><!-- IF groups_full.S_ON_LEGEND -->{L_YES}<!-- ELSE -->{L_NO}<!-- ENDIF --></td>
+			<td<!-- IF not groups_full.S_ON_LEGEND --> class="col2"<!-- ENDIF --> style="text-align: center;">
+					<!-- IF groups_full.S_FIRST_ROW && not groups_full.S_LAST_ROW -->
+						{ICON_MOVE_UP_DISABLED}
+						<a href="{groups_full.U_MOVE_DOWN}">{ICON_MOVE_DOWN}</a>
+					<!-- ELSEIF not groups_full.S_FIRST_ROW && not groups_full.S_LAST_ROW -->
+						<a href="{groups_full.U_MOVE_UP}">{ICON_MOVE_UP}</a>
+						<a href="{groups_full.U_MOVE_DOWN}">{ICON_MOVE_DOWN}</a>
+					<!-- ELSEIF groups_full.S_LAST_ROW && not groups_full.S_FIRST_ROW -->
+						<a href="{groups_full.U_MOVE_UP}">{ICON_MOVE_UP}</a>
+						{ICON_MOVE_DOWN_DISABLED}
+					<!-- ELSE -->
+						{ICON_MOVE_UP_DISABLED}
+						{ICON_MOVE_DOWN_DISABLED}
+					<!-- ENDIF -->
+			</td>
+		</tr>
+	<!-- END groups_full -->
+	</tbody>
+	</table>]]></action>
+			</edit>
+		</open>
+		<open src="language/en/acp/groups.php">
+			<edit>
+				<find>	'SPECIAL_GROUPS'			=> 'Pre-defined groups',</find>
+				<action type="after-add">	'SPECIAL_GROUP'			=> 'Pre-Defined Group',</action>
+			</edit>
+			<edit>
+				<find>	'TOTAL_MEMBERS'				=> 'Members',</find>
+				<action type="after-add"><![CDATA[	'LEGEND_POSITIONING'			=> 'Legend positioning',
+	'LEGEND_POSITIONING_EXPLAIN'			=> 'Below is the list of all usergroups that exist. Groups highlighted in a blue background are those that appear on the legend, while groups with a white background do not. You can change the positions of the groups in the legend by clicking the "Move up" and "Move down" buttons next to each group.',
+	'ON_LEGEND'			=> 'On Legend',]]></action>
+			</edit>
+		</open>
+		<open src="language/en/acp/common.php">
+			<edit>
+				<find><![CDATA[	'LOG_GROUP_UPDATED'		=> '<strong>Usergroup details updated</strong><br />» %s',]]></find>
+				<action type="after-add"><![CDATA[	'LOG_GROUP_MOVE_DOWN'		=> '<strong>Moved group</strong> %1$s <strong>behind</strong> %2$s',
+	'LOG_GROUP_MOVE_UP'		=> '<strong>Moved group</strong> %1$s <strong>in front of</strong> %2$s',]]></action>
+			</edit>
+		</open>
+		<open src="index.php">
+			<edit>
+				<find>	$sql = 'SELECT group_id, group_name, group_colour, group_type</find>
+				<inline-edit>
+					<inline-find>group_type</inline-find>
+					<inline-action type="after-add">, group_position</inline-action>
+				</inline-edit>
+			</edit>
+			<edit>
+				<find>		ORDER BY group_name ASC';</find>
+				<inline-edit>
+					<inline-find>group_name</inline-find>
+					<inline-action type="replace-with">group_position</inline-action>
+				</inline-edit>
+			</edit>
+			<edit>
+				<find>	$sql = 'SELECT g.group_id, g.group_name, g.group_colour, g.group_type</find>
+				<inline-edit>
+					<inline-find>g.group_type</inline-find>
+					<inline-action type="after-add">, g.group_position</inline-action>
+				</inline-edit>
+			</edit>
+			<edit>
+				<find>		ORDER BY g.group_name ASC';</find>
+				<inline-edit>
+					<inline-find>g.group_name</inline-find>
+					<inline-action type="replace-with">g.group_position</inline-action>
+				</inline-edit>
+			</edit>
+		</open>
+		<open src="viewonline.php">
+			<edit>
+				<find>	$sql = 'SELECT group_id, group_name, group_colour, group_type</find>
+				<inline-edit>
+					<inline-find>group_type</inline-find>
+					<inline-action type="after-add">, group_position</inline-action>
+				</inline-edit>
+			</edit>
+			<edit>
+				<find>		ORDER BY group_name ASC';</find>
+				<inline-edit>
+					<inline-find>group_name</inline-find>
+					<inline-action type="replace-with">group_position</inline-action>
+				</inline-edit>
+			</edit>
+			<edit>
+				<find>	$sql = 'SELECT g.group_id, g.group_name, g.group_colour, g.group_type</find>
+				<inline-edit>
+					<inline-find>g.group_type</inline-find>
+					<inline-action type="after-add">, g.group_position</inline-action>
+				</inline-edit>
+			</edit>
+			<edit>
+				<find>		ORDER BY g.group_name ASC';</find>
+				<inline-edit>
+					<inline-find>g.group_name</inline-find>
+					<inline-action type="replace-with">g.group_position</inline-action>
+				</inline-edit>
+			</edit>
+		</open>
+		<diy-instructions lang="en">After installing this MOD, you must run the included install_legend_repositioning.php file that was copied into the phpBB root directory during installation of this MOD. Otherwise, the MOD will not be activated.</diy-instructions>
+	</action-group>
+</mod>
